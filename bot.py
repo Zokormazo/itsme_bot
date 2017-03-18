@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-import telebot 
+import telebot
 from telebot import types
 
 import ConfigParser
@@ -15,6 +15,7 @@ import threading
 import schedule
 import requests
 import sys
+import os
 
 # Imports propios
 from bot_graphs import graph_statsFrom, graph_statsFrom2
@@ -24,31 +25,50 @@ import bot_eolparser
 #########################################################################
 # Globales
 #########################################################################
-	
-# Parseador para el fichero bot.cfg
-cfg_parser = ConfigParser.ConfigParser()
 
-try:
-	cfg_parser.read('bot.cfg')
-except:
-	print "No se puede leer bot.cfg"
-	quit()
-	
-try:
-	TOKEN		  = cfg_parser.get('settings', 'token')		   # Bot token
-	expruebas_cid = cfg_parser.getint('settings', 'cid_group') # id del chat de grupo
-	my_cid		  = cfg_parser.getint('settings', 'cid_user')  # id del chat individual
-	
-	print TOKEN
-	print expruebas_cid
-	print my_cid
-except:
-	print "Configuración incorrecta en bot.cfg"
-	traceback.print_exc()
-	quit()
+# Lector de variables de entorno
 
-bot	   = telebot.TeleBot(TOKEN) 
-oldTh  = bot_eolparser.loadThreads('forito.bin') 
+TOKEN = os.environ.get("ITSME_BOT_TOKEN", None)
+expruebas_cid = os.environ.get("ITSME_BOT_CID_GROUP", None)
+my_cid = os.environ.get("ITSME_BOT_CID_USER", None)
+
+if TOKEN == None || expruebas_cid == None || my_cid == None:
+	# Parseador para el fichero bot.cfg
+	cfg_parser = ConfigParser.ConfigParser()
+
+	try:
+		cfg_parser.read('bot.cfg')
+	except:
+		print "No se puede leer bot.cfg"
+		quit()
+
+		try:
+			if TOKEN == NULL:
+			    TOKEN		  = cfg_parser.get('settings', 'token')		   # Bot token
+			if expruebas_cid == NULL:
+			    expruebas_cid = cfg_parser.getint('settings', 'cid_group') # id del chat de grupo
+			if my_cid == NULL:
+			    my_cid		  = cfg_parser.getint('settings', 'cid_user')  # id del chat individual
+
+			print TOKEN
+			print expruebas_cid
+			print my_cid
+		except:
+			print "Configuración incorrecta en bot.cfg"
+			traceback.print_exc()
+			quit()
+
+# Seleccion del path al fichero de la base de datos sqlite3
+
+sqlite3_uri = os.environ.get("ITSME_BOT_DB_FILE", None)
+if sqlite3_uri == None:
+	try:
+		sqlite3_uri = cfg_parser.get('settings', 'db_path') # ruta de la base de datos
+	except:
+		sqlite3_uri = 'telegram.db'
+
+bot	   = telebot.TeleBot(TOKEN)
+oldTh  = bot_eolparser.loadThreads('forito.bin')
 
 admins		  = ["Korso10"]
 warn_noadmin  = "Va a ser que no, parguela."
@@ -65,7 +85,7 @@ spamlimit  = 5
 spammers   = ['Erikoptero']
 spamreply  = ['Te pires', 'Pesao', 'Y sigue...', 'Paso de ti', 'Qué cansino joder']
 banreply   = ['¿No te cansas, parguela? Te ignoro un rato.']
-	
+
 # modes
 jokesActive = False
 jokesProb	= 0.01
@@ -98,17 +118,17 @@ def bcast_stats():
 	bot.send_message(expruebas_cid,"Nuevo día. Veamos las estadísticas:")
 	statsFrom2(bot,expruebas_cid,3600*24,"Flood en el último dia",True)
 	graph_statsFrom2(bot,expruebas_cid,3600*24,"Flood en el ultimo dia", True)
-	
+
 def bcast_stats_h():
 	statsFrom2(bot,expruebas_cid,3600*12,"Flood en las últimas 12 horas",True)
 	graph_statsFrom2(bot,expruebas_cid,3600*12,"Flood en las ultimas 12 horas", True)
-	
+
 def check_forum(cid):
 	global oldTh
-	
+
 	# Mostramos nuevos hilos del foro
 	newTh = bot_eolparser.get_new_threads(oldTh)
-	
+
 	if len(newTh) == 0:
 		bot.send_message(cid, "Nada nuevo en el forito")
 	else:
@@ -117,7 +137,7 @@ def check_forum(cid):
 			msg += '<a href="%s">%s</a>' % (th[2],th[1])
 			print msg
 			bot.send_message(cid, msg, parse_mode="HTML")
-	
+
 	# Actualizamos oldTh para que no vuelva a repetir hilos
 	oldTh = bot_eolparser.get_threads()
 	# Guardamos hilos actualizados en el archivo por si peta el bot
@@ -129,14 +149,14 @@ def bcast(cid):
 def daily_worker(interval=1):
 	while True:
 		schedule.run_pending()
-		time.sleep(interval)	
-	
+		time.sleep(interval)
 
-		
+
+
 ########################################################################
 # Log de mensajes y relacionados
-########################################################################	
-		
+########################################################################
+
 # Esta funcion añade cada mensaje a la db para el conteo diario
 def msg_handler(m):
 	user = m.from_user.username
@@ -144,15 +164,15 @@ def msg_handler(m):
 	mid = m.message_id
 	time = m.date
 	chatid = m.chat.id
-	
+
 	print "[id: %s][%s][%s]: %s" % (mid, time, user, text)
-		
-	# Metemos el mensaje en la db temporal 
+
+	# Metemos el mensaje en la db temporal
 	try:
 		newmsg = "INSERT INTO messagelog VALUES('%s', '%s', '%s', '%s', '%s')" % (mid, user, time, text, chatid)
-		con = sqlite3.connect('telegram.db')
+		con = sqlite3.connect('sqlite3_uri')
 		cur = con.cursor()
-		
+
 		cur.execute(newmsg)
 		con.commit()
 		con.close()
@@ -160,15 +180,15 @@ def msg_handler(m):
 		print "Error añadiendo mensaje a db -> messagelog"
 		traceback.print_exc()
 	print "Nuevo mensaje añadido a db"
-		
+
 
 # Esta funcion borra la db de mensajes, reiniciando el conteo
 def del_messagelog(m):
 	try:
 		del_table = "DELETE FROM messagelog;"
-		con = sqlite3.connect('telegram.db')
+		con = sqlite3.connect('sqlite3_uri')
 		cur = con.cursor()
-		
+
 		cur.execute(del_table)
 		con.commit()
 		con.close()
@@ -179,7 +199,7 @@ def del_messagelog(m):
 
 
 # Esta funcion actualiza el ultimo mensaje de cada usuario junto con su fecha
-# la tabla donde se guardan estos datos es diferente a la que usa la funcion 
+# la tabla donde se guardan estos datos es diferente a la que usa la funcion
 # msg_handler
 def update_msg(m, debug = False):
 	try:
@@ -188,20 +208,20 @@ def update_msg(m, debug = False):
 		date = m.date
 	except:
 		print "Error parseando mensaje (update_msg)"
-	
+
 	try:
 		checkuser	= "SELECT user,msgcount FROM lastmessage WHERE user = '"+user+"';"
 		update1_cmd = "UPDATE lastmessage SET msg = '"+msgtext+"' WHERE user = '"+user+"';"
 		update2_cmd = "UPDATE lastmessage SET time = '"+str(date)+"' WHERE user = '"+user+"';"
 		newuser_cmd = "INSERT INTO lastmessage VALUES('"+user+"',"+str(date)+",'"+msgtext+"',0)"
-	   
-		con = sqlite3.connect('telegram.db')
+
+		con = sqlite3.connect('sqlite3_uri')
 		cur = con.cursor()
-		
+
 		# Verificamos si existe el usuario
 		cur.execute(checkuser)
 		data=cur.fetchone()
-		
+
 		# Si no existe, lo agregamos a la tabla
 		if data is None:
 			print "Agregando a",user,"a la db"
@@ -220,44 +240,44 @@ def update_msg(m, debug = False):
 		print "update:", update1_cmd, update2_cmd
 		print "new:", newuser_cmd
 		traceback.print_exc()
-		
+
 
 # Esta funcion consulta la db y envia un mensaje con las estadisticas
 def showmsgcount(m, debug = False):
 	cid = m.chat.id
 	query = "select user, msgcount from lastmessage order by msgcount desc;"
-	
+
 	try:
-		con = sqlite3.connect('telegram.db')
+		con = sqlite3.connect('sqlite3_uri')
 		cur = con.cursor()
-		
+
 		# Ejecutamos consulta y recogemos lista de mensajes
 		cur.execute(query)
 		rows = cur.fetchall()
-		
+
 		response = u""
 		for row in rows:
 			print row[0], row[1]
 			response += str("<b>"+row[0]+"</b>: "+str(row[1])+"\n")
-		
+
 		bot.send_message(cid, response, parse_mode="HTML")
 	except:
 		print "Error in showmsgcount"
 		traceback.print_exc()
-		
+
 # Esta funcion envia un mensaje indicando cuando un usuario envio su ultimo
 # mensaje y que dijo
 def lastwords(user):
 	try:
 		checkwords = "SELECT msg, time FROM lastmessage WHERE user = '"+user+"';"
-		
-		con = sqlite3.connect('telegram.db')
+
+		con = sqlite3.connect('sqlite3_uri')
 		cur = con.cursor()
-		
+
 		# Verificamos si existe el usuario
 		cur.execute(checkwords)
 		data=cur.fetchone()
-		
+
 		# Si no existe, lo agregamos a la tabla
 		if data is None:
 			return "Ni idea"
@@ -272,60 +292,60 @@ def lastwords(user):
 
 
 def replace_i(msg):
-	try:			
+	try:
 		msg = msg.lower()
 		msg = msg.replace(u'gu',u'gui')
 		msg = msg.replace(u'ga',u'gui')
 		msg = msg.replace(u'go',u'gui')
 		msg = msg.replace(u'guii',u'gui')
 		msg = msg.replace(u'guií',u'guí')
-		
+
 		msg = msg.replace(u'gú',u'guí')
 		msg = msg.replace(u'gá',u'guí')
 		msg = msg.replace(u'gó',u'guí')
 		msg = msg.replace(u'guíi',u'guí')
-		
+
 		msg = msg.replace(u'za',u'ci')
 		msg = msg.replace(u'ze',u'ci')
 		msg = msg.replace(u'zo',u'ci')
 		msg = msg.replace(u'zu',u'ci')
-		
+
 		msg = msg.replace(u'zá',u'cí')
 		msg = msg.replace(u'zá',u'cí')
 		msg = msg.replace(u'zí',u'cí')
 		msg = msg.replace(u'zú',u'cí')
-		
+
 		msg = msg.replace(u'que',u'qui')
-		
+
 		msg = msg.replace(u'qué',u'quí')
-		
+
 		msg = msg.replace(u'ca',u'qui')
 		msg = msg.replace(u'co',u'qui')
 		msg = msg.replace(u'cu',u'qui')
-		
+
 		msg = msg.replace(u'cá',u'quí')
 		msg = msg.replace(u'có',u'quí')
 		msg = msg.replace(u'cú',u'quí')
-		
+
 		msg = msg.replace(u'a',u'i')
 		msg = msg.replace(u'e',u'i')
 		msg = msg.replace(u'o',u'i')
-		
+
 		msg = msg.replace(u'á',u'í')
 		msg = msg.replace(u'é',u'í')
 		msg = msg.replace(u'ó',u'í')
-		
+
 		msg = msg.replace(u'ú ',u'í ')
 		msg = msg.replace(u'ú ',u'í ')
 		msg = msg.replace(u' ú',u' í')
 		msg = msg.replace(u' ú',u' í')
-		
+
 		msg = re.sub(r'([bcdfhjklmnprstvwxyz ])u','\\1i',msg)
 		msg = re.sub(r'([bcdfhjklmnprstvwxyz ])ú','\\1í',msg)
-		
+
 		msg = re.sub(r'u([bcdfhjklmnprstvwxyz ])','i\\1',msg)
 		msg = re.sub(r'ú([bcdfhjklmnprstvwxyz ])','í\\1',msg)
-		
+
 		return msg
 	except:
 		traceback.print_exc()
@@ -340,21 +360,21 @@ def command_joke(m):
 	try:
 		cid = m.chat.id
 		msg = toUnicode(m.text)
-		msg_unparsed = re.match(r'/burla (.+)',msg) 
+		msg_unparsed = re.match(r'/burla (.+)',msg)
 		print "msg_unparsed:",msg_unparsed.group(1)
 		reply = replace_i(msg_unparsed.group(1))
 		print "Reply:",reply
 		bot.send_message(cid, reply, parse_mode="HTML")
 	except:
 		traceback.print_exc()
-		
-		
+
+
 # Funcion para responder al /me
-@bot.message_handler(commands=["me"]) 
+@bot.message_handler(commands=["me"])
 def command_me(m):
 	global spamcount
 	global spamlimit
-	
+
 	try:
 		cid = m.chat.id
 		username = m.from_user.first_name
@@ -364,12 +384,12 @@ def command_me(m):
 		msg_unparsed = re.match(r'/me (.+)',m.text)
 		if msg_unparsed:
 			msgtext = msg_unparsed.group(1)
-			
+
 		#if usernick in fanteables and fantasprob < random.random():
 		#	reply = random.choice(fantas)
-		#else: 
+		#else:
 		reply = "<i>" + unicode(username) + " " + unicode(msgtext) + "</i>"
-		
+
 		if usernick not in spammers:
 			bot.send_message(cid, reply, parse_mode="HTML")
 		else:
@@ -385,9 +405,9 @@ def command_me(m):
 		traceback.print_exc()
 
 
-		
+
 # Funcion para obtener el ultimo mensaje de un user
-@bot.message_handler(commands=["lastwords"]) 
+@bot.message_handler(commands=["lastwords"])
 def command_lastwords(m):
 	try:
 		cid = m.chat.id
@@ -397,7 +417,7 @@ def command_lastwords(m):
 			reply = lastwords(lastwords_user.group(2))
 		else:
 			reply = "Escribe /lastwords @usuario para buscar lo último que dijo @usuario"
-			
+
 		bot.send_message(cid, reply, parse_mode="HTML")
 	except:
 		traceback.print_exc()
@@ -427,10 +447,10 @@ def jokes(m):
 				reply = "No entiendo: "+match.group(1)+"/"+match.group(2)
 			bot.send_message(cid, reply, parse_mode="HTML")
 		else:
-			bot.send_message(cid, warn_noadmin)		
+			bot.send_message(cid, warn_noadmin)
 	except:
 		traceback.print_exc()
-		
+
 # Funcion para deshabilitar las burlas
 @bot.message_handler(commands=["clint"])
 def clint(m):
@@ -456,10 +476,10 @@ def clint(m):
 				reply = "No entiendo: "+match.group(1)+"/"+match.group(2)
 			bot.send_message(cid, reply, parse_mode="HTML")
 		else:
-			bot.send_message(cid, warn_noadmin)		
+			bot.send_message(cid, warn_noadmin)
 	except:
 		traceback.print_exc()
-		
+
 # Funcion para cambiar la probabilidad de las burlas
 @bot.message_handler(commands=["jokesprob"])
 def jokesprob(m):
@@ -484,36 +504,36 @@ def jokesprob(m):
 				reply = "Probabilidad -> "+str(jokesProb)
 			bot.send_message(cid, reply, parse_mode="HTML")
 		else:
-			bot.send_message(cid, warn_noadmin)		
+			bot.send_message(cid, warn_noadmin)
 	except:
 		traceback.print_exc()
-		
+
 # Funcion para listar mensajes
 @bot.message_handler(commands=["flooders"])
 def command_flooders(m):
 	showmsgcount(m)
-		
+
 
 # Funcion de estadisticas de la ultima hora
 @bot.message_handler(commands=["stats1h"])
 def stats1h(m):
 	statsFrom(bot,m,3600, "Flood en la ultima hora", True)
 	graph_statsFrom(bot,m,3600,"Flood en la ultima hora", True)
-		
-	
+
+
 # Funcion de estadisticas del ultimo dia
 @bot.message_handler(commands=["stats1d"])
 def stats1d(m):
 	statsFrom(bot,m,3600*24, "Flood en el ultimo dia", True)
 	graph_statsFrom(bot,m,3600*24,"Flood en el ultimo dia", True)
-	
+
 # Funcion de estadisticas de la ultima semana
 @bot.message_handler(commands=["stats1s"])
 def stats1s(m):
 	statsFrom(bot,m,3600*24*7, "Flood en la ultima semana", True)
 	graph_statsFrom(bot,m,3600*24*7,"Flood en la ultima semana", True)
-	
-	
+
+
 # Funcion de estadisticas de la ultima hora
 @bot.message_handler(commands=["allstats1h"])
 def allstats1h(m):
@@ -523,7 +543,7 @@ def allstats1h(m):
 		graph_statsFrom(bot,m,3600,"Flood en la ultima hora", False)
 	else:
 		bot.send_message(cid, warn_noadmin)
-		
+
 # Funcion de estadisticas del ultimo dia
 @bot.message_handler(commands=["allstats1d"])
 def allstats1d(m):
@@ -533,7 +553,7 @@ def allstats1d(m):
 		graph_statsFrom(bot,m,3600*24,"Flood en el ultimo dia", False)
 	else:
 		bot.send_message(cid, warn_noadmin)
-			
+
 # Funcion de estadisticas de la ultima semana
 @bot.message_handler(commands=["allstats1s"])
 def allstats1s(m):
@@ -543,17 +563,17 @@ def allstats1s(m):
 		graph_statsFrom(bot,m,3600*24*7,"Flood en la ultima semana", False)
 	else:
 		bot.send_message(cid, warn_noadmin)
-	
+
 # Funcion para buscar nuevos hilos en ex-pruebas
 @bot.message_handler(commands=["pruebas"])
 def newinpruebas(m):
 	global oldTh
 	cid = m.chat.id
-	
+
 	usernick = m.from_user.username
 	if usernick in admins:
 		newTh = bot_eolparser.get_new_threads(oldTh)
-		
+
 		if newTh == None:
 			bot.send_message(cid, "No puedo leer el forito. Culpa de melado.")
 			return
@@ -566,17 +586,17 @@ def newinpruebas(m):
 			bot.send_message(cid, msg, parse_mode="HTML")
 	else:
 		bot.send_message(cid, warn_noadmin)
-		
-		
-		
-# Funcion general. 
+
+
+
+# Funcion general.
 @bot.message_handler(func=lambda m: True)
 def process_all(m):
 	global jokesActive
 	global jokesProb
 	global poleReply
 	global clint
-	
+
 	try:
 		cid = m.chat.id
 		username = m.from_user.first_name
@@ -590,12 +610,12 @@ def process_all(m):
 		# Añadimos el mensaje a la db
 		update_msg(m)
 		msg_handler(m)
-		
+
 		if poleReply:
 			if msgtext == "pole":
 				bot.send_video(cid, clint, reply_to_message_id=m.message_id)
 				poleReply = False
-		
+
 		# si el mensaje es medianamente largo y hay suerte, nos burlamos
 		if jokesActive:
 			if len(msgtext.split()) > 5:
@@ -605,20 +625,20 @@ def process_all(m):
 						bot.reply_to(m, reply, parse_mode="HTML")
 						#~ bot.send_message(cid, reply, parse_mode="HTML")
 					except:
-						traceback.print_exc()		
-		
+						traceback.print_exc()
+
 	except:
 		traceback.print_exc()
 
 
 # Funcion para borrar tabla messagelog
-@bot.message_handler(commands=["delmsglog"]) 
+@bot.message_handler(commands=["delmsglog"])
 def delmsglog(m):
 	cid = m.chat.id
 	username = m.from_user.first_name
 	usernick = m.from_user.username
 	response = ""
-	
+
 	if usernick in admins:
 		del_messagelog()
 		bot.send_message(cid, "Tabla messagelog borrada")
@@ -632,10 +652,10 @@ def main():
 
 	# db para ultimo mensaje
 	try:
-		con = sqlite3.connect('telegram.db')
+		con = sqlite3.connect('sqlite3_uri')
 		cur = con.cursor()
 	except:
-		print 'Error abriendo telegram.db'
+		print 'Error abriendo sqlite3_uri'
 		if con:
 			con.close()
 
@@ -645,13 +665,13 @@ def main():
 		print "clint.mp4 loaded"
 	except:
 		print "Can't load clint.mp4"
-		
+
 	# Lanzando hilos de scheduling
 	schedule.every().day.at("00:00").do(bcast_stats)
 	schedule.every().day.at("12:00").do(bcast_stats_h)
 	# Este falla de momento
 	#schedule.every().hour.do(check_forum,expruebas_cid)
-	
+
 	# Lanza el daily_worker, que va comprobando los schedules
 	t = threading.Thread(target=daily_worker)
 	t.start()
@@ -669,7 +689,7 @@ def main():
 		except:
 			print "Unspected error"
 			time.sleep(15)
-	
+
 
 
 

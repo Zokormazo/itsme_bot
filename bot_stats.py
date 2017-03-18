@@ -24,7 +24,7 @@ def statsFrom(bot,m,secondsFrom=3600,statsTitle="Flood en la ultima hora",onlyTh
 	try:
 		queryThisChat = "SELECT user, count(msg) FROM messagelog WHERE time >= %d AND chatid = %d GROUP BY user ORDER BY count(msg) desc" % (from_time, cid)
 		queryAllChats = "SELECT user, count(msg) FROM messagelog WHERE time >= %d GROUP BY user ORDER BY count(msg) desc" % (from_time)
-		con = sqlite3.connect('telegram.db')
+		con = sqlite3.connect('sqlite3_uri')
 		cur = con.cursor()
 		
 		if onlyThisChat:
@@ -59,7 +59,7 @@ def statsFrom2(bot,cid,secondsFrom=3600,statsTitle="Flood en la ultima hora",onl
 	try:
 		queryThisChat = "SELECT user, count(msg) FROM messagelog WHERE time >= %d AND chatid = %d GROUP BY user ORDER BY count(msg) desc" % (from_time, cid)
 		queryAllChats = "SELECT user, count(msg) FROM messagelog WHERE time >= %d GROUP BY user ORDER BY count(msg) desc" % (from_time)
-		con = sqlite3.connect('telegram.db')
+		con = sqlite3.connect('sqlite3_uri')
 		cur = con.cursor()
 		
 		if onlyThisChat:
